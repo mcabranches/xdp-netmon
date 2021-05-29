@@ -1,7 +1,0 @@
-[submodule "libbpf"]
-	path = ext/libbpf
-	url = https://github.com/libbpf/libbpf/
-
-[submodule "ext/libbpf"]
-	path = ext/libbpf
-	url = https://github.com/libbpf/libbpf/
