@@ -14,13 +14,16 @@
 static int iface_index = 0;
 static uint32_t xdp_flags_nic = XDP_FLAGS_HW_MODE;
 static uint32_t xdp_flags_host = XDP_FLAGS_DRV_MODE;
+int stop = 0;
 
 static void unload_prog(int sig) {
 
 	util::attach_xdp_fd(iface_index, -1, xdp_flags_nic);
 	util::attach_xdp_fd(iface_index, -1, xdp_flags_host);
 	std::cout << "unloading xdp program..." << std::endl;
-	exit(0);
+	stop = 1;
+	return;
+
 }
 
 int main(int argc, char** argv) {
@@ -30,6 +33,7 @@ int main(int argc, char** argv) {
 
 	int prog_fd = 0;
 	struct bpf_object* bpf_obj = nullptr;
+	struct bpf_object* bpf_obj_app = nullptr;
 
 	int cms_map_fds[NUM_CMS_MAPS];
 	char cms_map_name[16];
@@ -54,13 +58,18 @@ int main(int argc, char** argv) {
 	util::load_xdp_prog("build/bpf/xdp_comp_off_kern_host.o", &bpf_obj, &prog_fd, iface_index, xdp_flags_host);
 	util::attach_xdp_fd(iface_index, prog_fd, xdp_flags_host);
 
-	
+
 	//configure routing as in Oliver's diagram
 	auto xdp_router_map_fd = util::find_map_fd(bpf_obj, "rtg_table_map");
 	xdp_router xdp_router(xdp_router_map_fd, bpf_obj);
-	auto loop_analyzer_idx = xdp_router.add_prog_to_map("loop_analyzer");
-	auto loop_syn_flood_analyzer_idx = xdp_router.add_prog_to_map("syn_flood_analyzer");
-	auto traffic_accounting_idx = xdp_router.add_prog_to_map("traffic_accounting");
+	util::load_xdp_prog("build/bpf/xdp_loop_analyzer_kern.o", &bpf_obj_app, &prog_fd, iface_index, xdp_flags_host);
+	auto loop_analyzer_idx = xdp_router.add_prog_to_map("loop_analyzer", bpf_obj_app);
+	struct bpf_object* bpf_obj_app2 = nullptr;
+	util::load_xdp_prog("build/bpf/xdp_syn_flood_analyzer_kern.o", &bpf_obj_app2, &prog_fd, iface_index, xdp_flags_host);
+	auto syn_flood_analyzer_idx = xdp_router.add_prog_to_map("syn_flood_analyzer", bpf_obj_app2);
+	struct bpf_object* bpf_obj_app3 = nullptr;
+	util::load_xdp_prog("build/bpf/xdp_traffic_accounting_kern.o", &bpf_obj_app3, &prog_fd, iface_index, xdp_flags_host);
+	auto traffic_accounting_idx = xdp_router.add_prog_to_map("traffic_accounting", bpf_obj_app3);
 
 	struct fd_list_t fd_list;
 	
@@ -70,8 +79,7 @@ int main(int argc, char** argv) {
 	//not setting a key for "match all table"
 	fd_list.fds[0] = loop_analyzer_idx;
 	xdp_router.update_routing("mt_all_map", hkey_conf_rtg, fd_list);
-
-	fd_list.fds[0] = loop_syn_flood_analyzer_idx;
+	fd_list.fds[0] = syn_flood_analyzer_idx;
 	hkey_conf_rtg.proto = 6;
 	xdp_router.update_routing("mt_proto_map", hkey_conf_rtg, fd_list);
 
@@ -125,7 +133,7 @@ int main(int argc, char** argv) {
 	
 	std::uint32_t key;
 
-	while (1) {
+	while (!stop) {
 		std::cout << "--------------------" << std::endl;
 		xdp_hll.print_estimate();
 
@@ -147,9 +155,12 @@ int main(int argc, char** argv) {
 		std::cout << "--" << std::endl;
 		std::cout << "Total (UDP)" << std::endl;
 		traffic_counter.print_stats(key);
-
+	
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	}
+
+	xdp_router.unpin_app_maps();
+
 
 	return 0;
 }

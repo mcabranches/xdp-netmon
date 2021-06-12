@@ -12,6 +12,15 @@
 #include "../shared.h"
 
 
+//This is needed to avoid table conflicts between the router and apps
+//Populate this with routing section in main XDP entry point
+struct bpf_map_def SEC("maps") rtg_ind_table_map = {
+	.type = BPF_MAP_TYPE_PROG_ARRAY,
+	.key_size = sizeof(__u32),
+	.value_size = sizeof(__u32),
+	.max_entries = 1,
+};
+
 struct bpf_map_def SEC("maps") rtg_table_map = {
 	.type = BPF_MAP_TYPE_PROG_ARRAY,
 	.key_size = sizeof(__u32),
@@ -47,8 +56,8 @@ static __always_inline int get_hkey_cm(const struct xdp_md* ctx, struct hkey_t *
 {
 	struct custom_meta_desc *cm;
 	void *data = (void *)(long)ctx->data + sizeof(*cm);
-    void *data_end = (void *)(long)ctx->data_end;
-    struct ethhdr *eth = data;
+	void *data_end = (void *)(long)ctx->data_end;
+	struct ethhdr *eth = data;
 
 	if ((void *)eth + sizeof(*eth) <= data_end) 
 	{
@@ -87,8 +96,8 @@ static __always_inline int get_hkey_cm(const struct xdp_md* ctx, struct hkey_t *
 static __always_inline int remove_meta(struct xdp_md *ctx)
 {	//remove hll metadata
 	void *data = (void *)(long)ctx->data;
-    void *data_end = (void *)(long)ctx->data_end;
-    struct custom_meta_desc *cm;
+	void *data_end = (void *)(long)ctx->data_end;
+	struct custom_meta_desc *cm;
 
 	cm = data;
 
@@ -247,40 +256,5 @@ static __always_inline void mt_dstip(struct xdp_md *ctx, struct hkey_t *hkey)
 	}
 }
 
-static __always_inline int route_pkt(struct xdp_md *ctx)
-{
-	void *data = (void *)(long)ctx->data;
-    void *data_end = (void *)(long)ctx->data_end;
-    struct custom_meta_desc *cm;
-    __u16 cur_fd_ptr;
-	__u16 cur_fd_prog;
-
-
-	cm = data;
-
-	if (!((void *)cm + sizeof(*cm) <= data_end))
-	{
-		return XDP_ABORTED;	
-	}
-
-	if (cm->type != META_TYPE_HLL)
-		return -1;
-
-	cur_fd_ptr = cm->fd_prog_ptr;
-
-	if (cur_fd_ptr == cm->total_prgs)
-	{
-		remove_meta(ctx);
-		return XDP_PASS; // when we will drop a packet?
-	}
-	else
-	{
-		cur_fd_prog = get_cur_fd_prog(cur_fd_ptr, cm);
-		cm->fd_prog_ptr++;
-		bpf_tail_call(ctx, &rtg_table_map, cur_fd_prog);
-	}
-	remove_meta(ctx);
-	return -1;
-}
 
 #endif

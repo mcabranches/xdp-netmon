@@ -5,8 +5,9 @@
 
 #include "../shared.h"
 
-SEC("XDP1")
-int xdp_entry_router(struct xdp_md* ctx) {
+
+SEC("XDPEP")
+int xdp_entry_point(struct xdp_md* ctx) {
 
 	struct hkey_t hkey = {};
 
@@ -14,7 +15,7 @@ int xdp_entry_router(struct xdp_md* ctx) {
 
 	get_hkey_cm(ctx, &hkey); //get 5-tuple to use on the matches
 
-	//do the matches and populate route of XDP progs for the packet 
+	//do the matches and populate route of XDP progs for the packet
 	mt_all(ctx);
 
 	mt_proto(ctx, &hkey);
@@ -22,46 +23,45 @@ int xdp_entry_router(struct xdp_md* ctx) {
 	mt_dstip(ctx, &hkey);
 
 	//route the packet
-	route_pkt(ctx);
+	bpf_tail_call(ctx, &rtg_ind_table_map, 0);
 
 	return XDP_PASS;
 }
 
+SEC("XDPRTG")
+int xdp_route_pkt(struct xdp_md *ctx)
+{
+	void *data = (void *)(long)ctx->data;
+	void *data_end = (void *)(long)ctx->data_end;
+	struct custom_meta_desc *cm;
+	__u16 cur_fd_ptr;
+	__u16 cur_fd_prog;
 
-//Move each of the next sections to their own file
-SEC("XDP2")
-int loop_analyzer(struct xdp_md* ctx) {
+	cm = data;
 
-	bpf_debug("loop_analyzer\n");
+	if (!((void *)cm + sizeof(*cm) <= data_end))
+	{
+		return XDP_ABORTED;	
+	}
 
-	//logic goes here
+	if (cm->type != META_TYPE_HLL)
+		return XDP_PASS;
 
-	route_pkt(ctx);
+	cur_fd_ptr = cm->fd_prog_ptr;
 
-	return XDP_PASS;
-}
-
-SEC("XDP3")
-int syn_flood_analyzer(struct xdp_md* ctx) {
-
-	bpf_debug("syn_flood_analyzer\n");
-
-	//logic goes here
-
-	route_pkt(ctx);
-
-	return XDP_PASS;
-}
-
-SEC("XDP4")
-int traffic_accounting(struct xdp_md* ctx) {
-
-	bpf_debug("traffic_accounting\n");
-
-	//logic goes here
-
-	route_pkt(ctx);
-
+	if (cur_fd_ptr == cm->total_prgs)
+	{
+		remove_meta(ctx);
+		return XDP_PASS; // when we will drop a packet?
+	}
+	else
+	{
+		cur_fd_prog = get_cur_fd_prog(cur_fd_ptr, cm);
+		cm->fd_prog_ptr++;
+		//send to the next app
+		bpf_tail_call(ctx, &rtg_table_map, cur_fd_prog);
+	}
+	remove_meta(ctx);
 	return XDP_PASS;
 }
 

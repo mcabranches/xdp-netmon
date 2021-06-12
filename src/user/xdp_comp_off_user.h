@@ -270,6 +270,7 @@ private:
 
 class xdp_router {
 public:
+	//the map lookup here may be hard coded
 	explicit xdp_router(int map_fd, struct bpf_object* bpf_obj) {
 
 		if (map_fd < 0)
@@ -281,21 +282,29 @@ public:
 			throw std::invalid_argument("xdp_router: invalid bpf object");
 		else
 			_bpf_obj = bpf_obj;
-		
+
+		_bpf_prog = bpf_object__find_program_by_name(bpf_obj, "xdp_route_pkt");
+		_xdp_route_pkt_fd = bpf_program__fd(_bpf_prog);
+
+		init_ind_table(bpf_obj);
+
 		_idx = 0;
 
 	}
 
-	int add_prog_to_map(const char *prog_name)
+	int add_prog_to_map(const char *prog_name, struct bpf_object* bpf_obj)
 	{
-		_bpf_prog = bpf_object__find_program_by_name(_bpf_obj, prog_name);
+		_bpf_prog = bpf_object__find_program_by_name(bpf_obj, prog_name);
 		int prog_fd = bpf_program__fd(_bpf_prog);
 		int cur_idx = _idx;
 		if ((bpf_map_update_elem(_map_fd, &cur_idx, &prog_fd, 0)) != 0)
 			throw std::runtime_error("xdp_router: failed adding program to map");
 
-		_idx++;
+		init_ind_table(bpf_obj);
 
+		pin_app_maps(bpf_obj);
+
+		_idx++;
 		return cur_idx;
 	}
 
@@ -336,11 +345,41 @@ public:
 
 	}
 
+	void pin_app_maps(struct bpf_object* bpf_obj)
+	{
+		_bpf_obj_apps[_idx] = bpf_obj;
+
+		bpf_object__pin_maps(bpf_obj, "/sys/fs/bpf/");
+		//avoid conflicts between rtg_ind_table_map from different apps
+		std::remove("/sys/fs/bpf/rtg_ind_table_map");
+		
+	}
+
+	void unpin_app_maps(void)
+	{
+		std::cout << "unpinning maps" << std::endl;
+		system("rm /sys/fs/bpf/xdp_*_map");
+	}
+
 private:
 	int _map_fd;
 	int _idx;
+	int _xdp_route_pkt_fd;
 	struct bpf_object *_bpf_obj = nullptr;
 	struct bpf_program *_bpf_prog;
+	struct bpf_object *_bpf_obj_apps[MAX_CPO_PRGS];
+
+
+	void init_ind_table(struct bpf_object* bpf_obj)
+	{
+
+		int entry_idx = 0;
+		auto rtg_ind_table_map_fd = util::find_map_fd(bpf_obj, "rtg_ind_table_map");
+		if ((bpf_map_update_elem(rtg_ind_table_map_fd, &entry_idx, &_xdp_route_pkt_fd, 0)) != 0)
+			throw std::runtime_error("xdp_router: failed initing rtg_ind_table_map");
+
+	}
+
 };
 
 #endif

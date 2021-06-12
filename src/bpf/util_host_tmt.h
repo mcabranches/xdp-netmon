@@ -17,16 +17,16 @@ struct bpf_map_def SEC("maps") map_hll_1 = {
 static __always_inline int update_HLL(struct xdp_md *ctx)
 {
 	void *data = (void *)(long)ctx->data;
-    void *data_end = (void *)(long)ctx->data_end;
-    struct custom_meta_desc *cm;
+	void *data_end = (void *)(long)ctx->data_end;
+	struct custom_meta_desc *cm;
 	__u32 *cur_max_zeros;
 	__u32 bucket;
 	__u32 num_zeros;
 
 	cm = data;
 	//Add HLL data to map
-    if ((void *)cm + sizeof(*cm) <= data_end)
-    {
+	if ((void *)cm + sizeof(*cm) <= data_end)
+	{
 		bucket = cm->bucket;
 		num_zeros = cm->num_zeros;
 	}
@@ -58,8 +58,8 @@ static __always_inline int update_HLL(struct xdp_md *ctx)
 static __always_inline int process_custom_telemetry_meta(struct xdp_md *ctx)
 {
 	void *data = (void *)(long)ctx->data;
-    void *data_end = (void *)(long)ctx->data_end;
-    struct custom_meta_desc *cm;
+	void *data_end = (void *)(long)ctx->data_end;
+	struct custom_meta_desc *cm;
 
 	cm = data;
 
