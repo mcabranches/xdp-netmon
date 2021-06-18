@@ -13,7 +13,7 @@ struct bpf_map_def SEC("maps") xdp_traffic_accounting_map = {
 SEC("XDPTA")
 int traffic_accounting(struct xdp_md* ctx) {
 
-	bpf_debug("traffic_accounting\n");
+	//bpf_debug("traffic_accounting\n");
 
 	//logic goes here
 

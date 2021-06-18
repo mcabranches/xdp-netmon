@@ -58,7 +58,6 @@ struct bpf_map_def SEC("maps") map_cms_3 = {
 	.max_entries = MAX_CMS_ELEM,
 };
 
-
 static __always_inline int get_hkey(const struct xdp_md* ctx, struct hkey_t *hkey) 
 {
 	void *data = (void *)(long)ctx->data;
@@ -77,10 +76,27 @@ static __always_inline int get_hkey(const struct xdp_md* ctx, struct hkey_t *hke
 				struct udphdr *udp = (void *)ip + sizeof(*ip);
             	if ((void *)udp + sizeof(*udp) <= data_end)
             	{
-					hkey->sport = bpf_ntohs(udp->source);
-					hkey->dport = bpf_ntohs(udp->dest);
-					hkey->saddr = bpf_ntohl(ip->saddr);
-					hkey->daddr = bpf_ntohl(ip->daddr);
+					if (bpf_ntohs(udp->dest) != GPV_DST_PORT)
+					{
+						hkey->is_gpv = 0;
+						hkey->sport = bpf_ntohs(udp->source);
+						hkey->dport = bpf_ntohs(udp->dest);
+						hkey->saddr = bpf_ntohl(ip->saddr);
+						hkey->daddr = bpf_ntohl(ip->daddr);
+					}
+					else //get hkey from gpv
+					{
+						struct gpv_pkt_t *gpv = (void *)udp + sizeof(*udp);
+						if ((void *)gpv + sizeof(*gpv) <= data_end)
+						{
+							hkey->is_gpv = 1;
+							hkey->proto = gpv->ip_proto;
+							hkey->sport = gpv->tp_src;
+							hkey->dport = gpv->tp_dst;
+							hkey->saddr = gpv->ip_src;
+							hkey->daddr = gpv->ip_dst;
+						}
+					}
 				}
 			}
 			else if (ip->protocol == 6)
@@ -88,6 +104,7 @@ static __always_inline int get_hkey(const struct xdp_md* ctx, struct hkey_t *hke
 				struct tcphdr *tcp = (void *)ip + sizeof(*ip);
             	if ((void *)tcp + sizeof(*tcp) <= data_end)
             	{
+					hkey->is_gpv = 0;
 					hkey->sport = bpf_ntohs(tcp->source);
 					hkey->dport = bpf_ntohs(tcp->dest);
 					hkey->saddr = bpf_ntohl(ip->saddr);
@@ -96,7 +113,7 @@ static __always_inline int get_hkey(const struct xdp_md* ctx, struct hkey_t *hke
 			}
 		}
 	}	
-	return 1;
+	return -1;
 }
 
 static __always_inline unsigned pkt_bytes(const struct xdp_md* ctx)
@@ -122,7 +139,7 @@ static __always_inline void update_counter_map(const struct xdp_md* ctx, __u32 k
 	}
 }
 
-//We should have something similar to count GPV data
+//We should have something similar to count GPV data (if it carries more than one pkt data)
 static __always_inline void update_counter(const struct xdp_md* ctx, struct hkey_t hkey)
 {
 	__u32 key;
@@ -219,28 +236,10 @@ static __always_inline int write_meta(struct xdp_md *ctx, struct custom_meta_des
 	return 1;
 }
 
-static __always_inline __u32 five_tuple_hash_gpv(struct gpv_pkt_t *gpv_pkt)
-{
-	struct gpv_pkt_t hkey;
-	__u32 hash;
-	if (gpv_pkt)
-	{
-		hkey.ip_src = gpv_pkt->ip_src;
-		hkey.ip_dst = gpv_pkt->ip_dst;
-		hkey.tp_src = gpv_pkt->tp_src;
-		hkey.tp_dst = gpv_pkt->tp_dst;
-		hkey.ip_proto = gpv_pkt->ip_proto;
-		hash = jhash(&hkey, sizeof(struct gpv_pkt_t), 0x5678);
-		return hash;
-	}
-	else 
-		return -1;
-}
-
-static __always_inline __u32 five_tuple_hash_udp(struct hkey_t udp_key)
+static __always_inline __u32 five_tuple_hash(struct hkey_t hkey)
 {
 	__u32 hash;
-	hash = jhash(&udp_key, sizeof(struct hkey_t), 0x5678);
+	hash = jhash(&hkey, sizeof(struct hkey_t), 0x5678);
 	return hash;
 }
 
@@ -276,7 +275,7 @@ static __always_inline __u8 do_telemetry(struct hkey_t *hkey)
 
 	__u8 *do_telemetry_bm = NULL;
 
-	//Verfy if generic UDP should be monitored
+	//Verfy if generic protocol should be monitored
 	do_telemetry_bm = (__u8 *) bpf_map_lookup_elem(&do_telemetry_map, &proto_hkey);
 	
 	if (do_telemetry_bm)
@@ -299,29 +298,13 @@ static __always_inline __u8 do_telemetry(struct hkey_t *hkey)
 	return -1;
 }
 
-
-static __always_inline int build_meta_gpv(struct gpv_pkt_t *gpv_pkt, struct custom_meta_desc *meta)
-{
-	__u32 hash;
-	__u32 num_zeroes;
-
-	hash = five_tuple_hash_gpv(gpv_pkt);
-	num_zeroes = count_num_zeroes(hash);
-	meta->hash = hash;
-	meta->num_zeros = num_zeroes;
-	meta->fd_prog_ptr = 0;
-
-	return 1;
-}
-
-//this also works for TCP. So change the function's name
-static __always_inline int build_meta_udp(struct hkey_t udp_key, struct custom_meta_desc *meta)
+static __always_inline int build_meta(struct hkey_t hkey, struct custom_meta_desc *meta)
 {
 	__u32 hash;
 	__u32 num_zeroes;
 	__u32 bucket;
 
-	hash = five_tuple_hash_udp(udp_key);
+	hash = five_tuple_hash(hkey);
 	bucket = (hash & BUCKET_MASK) >> (32 - BUCKET_SHIFT);
 	hash = hash << BUCKET_SHIFT;
 	num_zeroes = count_num_zeroes(hash);
@@ -335,62 +318,19 @@ static __always_inline int build_meta_udp(struct hkey_t udp_key, struct custom_m
 	return 1;
 }
 
-static __always_inline int gen_meta_gpv_hll(struct xdp_md *ctx)
+static __always_inline void gen_meta_hll(struct xdp_md *ctx)
 {
-	void *data = (void *)(long)ctx->data;
-	void *data_end = (void *)(long)ctx->data_end;
-  	struct ethhdr *eth = data;
-	struct gpv_pkt_t *gpv_pkt = NULL;
+	
+	struct hkey_t hkey = {};
 	struct custom_meta_desc meta;
 
-	if ((void *)eth + sizeof(*eth) <= data_end)
-    	{
-        	struct iphdr *ip = data + sizeof(*eth);
-        	if ((void *)ip + sizeof(*ip) <= data_end)
-        	{
-			gpv_pkt = (void *)ip + sizeof(struct iphdr) + sizeof(struct udphdr);
-			if ((void *)gpv_pkt + sizeof(*gpv_pkt) <= data_end)
-			{
-				build_meta_gpv(gpv_pkt, &meta);
-				
-				write_meta(ctx, &meta);
-			}
-        	}
-    	}
-	return XDP_PASS;
-}
+	get_hkey(ctx, &hkey);
 
-//adap this to support TCP as well
-static __always_inline int gen_meta_udp_hll(struct xdp_md *ctx)
-{
-	void *data = (void *)(long)ctx->data;
-    void *data_end = (void *)(long)ctx->data_end;
-    struct ethhdr *eth = data;
-	struct udphdr *udp_pkt = NULL;
-	struct hkey_t udp_key;
-	struct custom_meta_desc meta;
+	build_meta(hkey, &meta);
 
-	if ((void *)eth + sizeof(*eth) <= data_end)
-    {
-		struct iphdr *ip = data + sizeof(*eth);
-        	
-		if ((void *)ip + sizeof(*ip) <= data_end)
-        	{
-			udp_pkt = (void *)ip + sizeof(struct iphdr);
-			
-			if ((void *)udp_pkt + sizeof(*udp_pkt) <= data_end)
-			{
-				udp_key.saddr = ip->saddr;
-				udp_key.daddr = ip->daddr;
-				udp_key.sport = udp_pkt->source;
-				udp_key.dport = udp_pkt->dest;
-			
-				build_meta_udp(udp_key, &meta);
-				write_meta(ctx, &meta);
-			}
-        }
-    }
-	return XDP_PASS;
+	write_meta(ctx, &meta);
+
+	return;
 }
 
 #endif

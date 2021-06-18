@@ -15,7 +15,7 @@ int xdp_entry_router(struct xdp_md* ctx) {
 
 	if (do_telemetry(&hkey) == 1)
 	{
-		gen_meta_udp_hll(ctx);
+		gen_meta_hll(ctx);
 		update_counter(ctx, hkey);
 		update_cms(ctx, hkey);
 	}
@@ -31,47 +31,46 @@ int xdp_entry_router(struct xdp_md* ctx) {
 
 	mt_dstip(ctx, &hkey);
 
-	//route the packet
-	route_pkt(ctx);
+	//route the packet - user space app add "xdp_route_pkt()" to "rtg_ind_table_map"
+	bpf_tail_call(ctx, &rtg_ind_table_map, 0);
 
 	return XDP_PASS;
 }
 
+SEC("XDPRTG")
+int xdp_route_pkt(struct xdp_md *ctx)
+{
+	void *data = (void *)(long)ctx->data;
+	void *data_end = (void *)(long)ctx->data_end;
+	struct custom_meta_desc *cm;
+	__u16 cur_fd_ptr;
+	__u16 cur_fd_prog;
 
-//Move each of the next sections to their own file
-SEC("XDP2")
-int loop_analyzer(struct xdp_md* ctx) {
+	cm = data;
 
-	bpf_debug("loop_analyzer\n");
+	if (!((void *)cm + sizeof(*cm) <= data_end))
+	{
+		return XDP_ABORTED;	
+	}
 
-	//logic goes here
+	if (cm->type != META_TYPE_HLL)
+		return XDP_PASS;
 
-	route_pkt(ctx);
+	cur_fd_ptr = cm->fd_prog_ptr;
 
-	return XDP_PASS;
-}
-
-SEC("XDP3")
-int syn_flood_analyzer(struct xdp_md* ctx) {
-
-	bpf_debug("syn_flood_analyzer\n");
-
-	//logic goes here
-
-	route_pkt(ctx);
-
-	return XDP_PASS;
-}
-
-SEC("XDP4")
-int traffic_accounting(struct xdp_md* ctx) {
-
-	bpf_debug("traffic_accounting\n");
-
-	//logic goes here
-
-	route_pkt(ctx);
-
+	if (cur_fd_ptr == cm->total_prgs)
+	{
+		remove_meta(ctx);
+		return XDP_PASS; // when we will drop a packet?
+	}
+	else
+	{
+		cur_fd_prog = get_cur_fd_prog(cur_fd_ptr, cm);
+		cm->fd_prog_ptr++;
+		//send to the next app
+		bpf_tail_call(ctx, &rtg_table_map, cur_fd_prog);
+	}
+	remove_meta(ctx);
 	return XDP_PASS;
 }
 

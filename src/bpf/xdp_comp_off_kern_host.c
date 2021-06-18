@@ -22,7 +22,7 @@ int xdp_entry_point(struct xdp_md* ctx) {
 
 	mt_dstip(ctx, &hkey);
 
-	//route the packet
+	//route the packet - user space app add "xdp_route_pkt()" to "rtg_ind_table_map"
 	bpf_tail_call(ctx, &rtg_ind_table_map, 0);
 
 	return XDP_PASS;

@@ -14,8 +14,11 @@ int xdp_pass(struct xdp_md* ctx) {
 
 	if (do_telemetry(&hkey) == 1)
 	{
-		gen_meta_udp_hll(ctx);
+	
+		gen_meta_hll(ctx);
+
 		update_counter(ctx, hkey);
+		
 		update_cms(ctx, hkey);
 		
 		//simple LB

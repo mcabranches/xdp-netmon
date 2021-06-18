@@ -14,7 +14,7 @@ struct bpf_map_def SEC("maps") xdp_loop_analyzer_map = {
 SEC("XDPLA")
 int loop_analyzer(struct xdp_md* ctx) {
 
-	bpf_debug("loop_analyzer\n");
+	//bpf_debug("loop_analyzer\n");
 
 	//logic goes here
 

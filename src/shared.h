@@ -4,6 +4,8 @@
 
 #define META_TYPE_HLL 0x1234
 
+#define GPV_DST_PORT 42742
+
 #define bpf_debug(fmt, ...)\
 ({\
 	char ____fmt[] = fmt;\
@@ -36,11 +38,16 @@
 #define NUM_BUCKETS (2 << (BUCKET_SHIFT - 1))
 
 //use power of 2 size to make the NIC happy
-#define MAX_CMS_ELEM 2048
+#define MAX_CMS_ELEM 524288
 
 #define NUM_CMS_MAPS 3
 
 #define MAX_CPO_PRGS 5
+
+#define CUSTOM_META_OFFSET 28
+
+#define GPV_HDR_OFFSET 42 // + 42 (eth - 14, ip - 20, udp - 8)
+
 
 //fds list to control prog monitoring prog execution
 struct fd_list_t {
@@ -52,11 +59,12 @@ struct hkey_t {
 	__u32 daddr;
 	__u16 sport;
 	__u16 dport;
-	__u16 proto;
+	__u8 proto;
+	__u8 is_gpv;
 };
 
 //metadata added by the smartNIC
-struct custom_meta_desc {
+struct custom_meta_desc { //28B
 	__u32 type;	//enable xdp on host to identify metadata on telemetry packet
 	__u32 bucket;
 	__u32 num_zeros;
@@ -75,7 +83,15 @@ struct custom_meta_desc {
 	__u16 fd_prog5;
 };
 
-struct gpv_pkt_t {
+struct ip4_5tuple {
+	__u32 ip_src;
+	__u32 ip_dst;
+	__u16 tp_src;
+	__u16 tp_dst;
+	__u8  ip_proto;
+};
+
+struct gpv_pkt_t { //16B
 	__u32 ip_src;
 	__u32 ip_dst;
 	__u16 tp_src;
@@ -84,6 +100,18 @@ struct gpv_pkt_t {
 	__u8 ingress_port;
 	__u8 pkt_count;
 	__u8 pad;
+};
+
+struct gpv_p_t { // 16B
+	__u64 timestamp_size;
+	__u16 queue_depth;
+	__u16 ip_id;
+	__u32 pd;
+};
+
+struct gpv_pd_tcp_t { // 4B
+	__u8 flags;
+	__u8 pad[3];
 };
 
 struct stats {
