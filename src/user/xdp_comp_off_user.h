@@ -290,6 +290,10 @@ public:
 
 		_idx = 0;
 
+		_n_cpus = libbpf_num_possible_cpus();
+
+		_last_pkts_count = 0;
+
 	}
 
 	int add_prog_to_map(const char *prog_name, struct bpf_object* bpf_obj)
@@ -330,6 +334,26 @@ public:
 				throw std::runtime_error("xdp_router: failed adding program to map");
 		}
 
+		else if (!strcmp(map_name, "mt_sport_map"))
+		{
+			__u16 key = hkey.sport;
+
+			auto map_fd  = util::find_map_fd(_bpf_obj, map_name);
+			
+			if ((bpf_map_update_elem(map_fd, &key, &fd_list, 0)) != 0)
+				throw std::runtime_error("xdp_router: failed adding program to map");
+		}
+
+		else if (!strcmp(map_name, "mt_dport_map"))
+		{
+			__u16 key = hkey.dport;
+
+			auto map_fd  = util::find_map_fd(_bpf_obj, map_name);
+			
+			if ((bpf_map_update_elem(map_fd, &key, &fd_list, 0)) != 0)
+				throw std::runtime_error("xdp_router: failed adding program to map");
+		}
+
 		else if (!strcmp(map_name, "mt_dstip_map"))
 		{
 			__u32 key = hkey.daddr;
@@ -358,16 +382,48 @@ public:
 	void unpin_app_maps(void)
 	{
 		std::cout << "unpinning maps" << std::endl;
-		system("rm /sys/fs/bpf/xdp_*_map");
+		system("rm /sys/fs/bpf/*_map");
 	}
+
+	        //end of chain counter
+    void print_eoc_counter(void)
+    {
+        std::uint32_t key = 0;
+		int pkt_rate;
+        int map_fd = util::find_map_fd(_bpf_obj, "eoc_counter_map");
+
+        struct stats total = { .bytes = 0, .pkts = 0 };
+        struct stats per_cpu[_n_cpus] = { };
+
+        if ((bpf_map_lookup_elem(map_fd, &key, per_cpu)) != 0)
+            throw std::runtime_error("xdp_traffic_counter: failed reading bpf map contents");
+
+        for (unsigned i = 0; i < _n_cpus; i++) 
+		{
+            total.bytes += per_cpu[i].bytes;
+            total.pkts += per_cpu[i].pkts;
+        }
+
+		pkt_rate = total.pkts - _last_pkts_count;
+
+		_last_pkts_count = total.pkts;
+
+		//std::cout << "--" << std::endl;
+        //std::cout << "eoc byte count: " << total.bytes << std::endl;
+        //std::cout << "eoc pkt count: " << total.pkts << std::endl;
+		std::cout << "eoc pkt/s: " << pkt_rate << std::endl;
+
+    }
 
 private:
 	int _map_fd;
 	int _idx;
 	int _xdp_route_pkt_fd;
+	unsigned _n_cpus;
 	struct bpf_object *_bpf_obj = nullptr;
 	struct bpf_program *_bpf_prog;
 	struct bpf_object *_bpf_obj_apps[MAX_CPO_PRGS];
+	int _last_pkts_count;
 
 
 	void init_ind_table(struct bpf_object* bpf_obj)

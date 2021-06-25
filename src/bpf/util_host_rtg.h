@@ -44,6 +44,22 @@ struct bpf_map_def SEC("maps") mt_proto_map = {
 	.max_entries = 2,
 };
 
+//match sport map
+struct bpf_map_def SEC("maps") mt_sport_map = {
+	.type = BPF_MAP_TYPE_HASH, //change to percpu
+	.key_size = sizeof(__u16),
+	.value_size = sizeof(struct fd_list_t),
+	.max_entries = 1024,
+};
+
+//match sport map
+struct bpf_map_def SEC("maps") mt_dport_map = {
+	.type = BPF_MAP_TYPE_HASH, //change to percpu
+	.key_size = sizeof(__u16),
+	.value_size = sizeof(struct fd_list_t),
+	.max_entries = 1024,
+};
+
 //match dst ip map
 struct bpf_map_def SEC("maps") mt_dstip_map = {
 	.type = BPF_MAP_TYPE_HASH, //change this to LPM Map
@@ -242,6 +258,32 @@ static __always_inline void mt_all(struct xdp_md *ctx)
 		//for (int i = 0; i < MAX_CPO_PRGS; i++)
 			write_fds_list(ctx, fdl->fds[0]);
 		
+	}
+}
+
+static __always_inline void mt_port(struct xdp_md *ctx, struct hkey_t *hkey)
+{
+	struct fd_list_t *fdl;
+
+	fdl = (struct fd_list_t *)bpf_map_lookup_elem(&mt_sport_map, &hkey->sport);
+
+	if (fdl)
+	{
+		//bpf_debug("Matched sport\n");
+
+		//for (int i = 0; i < MAX_CPO_PRGS; i++)
+			write_fds_list(ctx, fdl->fds[0]);
+			return; //write fdlist once 
+	}
+	else
+	{
+		fdl = (struct fd_list_t *)bpf_map_lookup_elem(&mt_dport_map, &hkey->dport);
+		if (fdl)
+		{
+			//bpf_debug("Matched dport\n");
+			write_fds_list(ctx, fdl->fds[0]);
+		}
+		return;
 	}
 }
 

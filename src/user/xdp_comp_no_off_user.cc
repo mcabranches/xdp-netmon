@@ -52,8 +52,8 @@ int main(int argc, char** argv) {
 	//configure routing as in Oliver's diagram
 	auto xdp_router_map_fd = util::find_map_fd(bpf_obj, "rtg_table_map");
 	xdp_router xdp_router(xdp_router_map_fd, bpf_obj);
-	util::load_xdp_prog("build/bpf/xdp_loop_analyzer_kern.o", &bpf_obj_app, &prog_fd, iface_index, xdp_flags_host);
-	auto loop_analyzer_idx = xdp_router.add_prog_to_map("loop_analyzer", bpf_obj_app);
+	util::load_xdp_prog("build/bpf/xdp_dns_refl_analyzer_kern.o", &bpf_obj_app, &prog_fd, iface_index, xdp_flags_host);
+	auto dns_refl_analyzer_idx = xdp_router.add_prog_to_map("dns_refl_analyzer", bpf_obj_app);
 	struct bpf_object* bpf_obj_app2 = nullptr;
 	util::load_xdp_prog("build/bpf/xdp_syn_flood_analyzer_kern.o", &bpf_obj_app2, &prog_fd, iface_index, xdp_flags_host);
 	auto syn_flood_analyzer_idx = xdp_router.add_prog_to_map("syn_flood_analyzer", bpf_obj_app2);
@@ -67,15 +67,18 @@ int main(int argc, char** argv) {
 	hkey_conf_rtg = {0};
 
 	//not setting a key for "match all table"
-	fd_list.fds[0] = loop_analyzer_idx;
+	fd_list.fds[0] = traffic_accounting_idx;
 	xdp_router.update_routing("mt_all_map", hkey_conf_rtg, fd_list);
 	fd_list.fds[0] = syn_flood_analyzer_idx;
 	hkey_conf_rtg.proto = 6;
 	xdp_router.update_routing("mt_proto_map", hkey_conf_rtg, fd_list);
-
-	fd_list.fds[0] = traffic_accounting_idx;
-	hkey_conf_rtg.daddr = 167837953; //10.1.1.1
-	xdp_router.update_routing("mt_dstip_map", hkey_conf_rtg, fd_list);
+	fd_list.fds[0] = dns_refl_analyzer_idx;
+	hkey_conf_rtg.sport = 53;
+	xdp_router.update_routing("mt_sport_map", hkey_conf_rtg, fd_list);
+	hkey_conf_rtg.dport = 53;
+	xdp_router.update_routing("mt_dport_map", hkey_conf_rtg, fd_list);
+	//hkey_conf_rtg.daddr = 167837953; //10.1.1.1
+	//xdp_router.update_routing("mt_dstip_map", hkey_conf_rtg, fd_list);
 
 	//HyperLogLog
 	auto hll_map_fd  = util::find_map_fd(bpf_obj, "map_hll_1");
@@ -145,7 +148,9 @@ int main(int argc, char** argv) {
 		std::cout << "--" << std::endl;
 		std::cout << "Total (UDP)" << std::endl;
 		traffic_counter.print_stats(key);
-	
+		
+		xdp_router.print_eoc_counter();
+
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	}
 

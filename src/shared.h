@@ -119,4 +119,9 @@ struct stats {
 	__u64 pkts;
 };
 
+struct flow_table_entry {
+	__u64 timestamp;
+	struct stats stats;	
+};
+
 #endif

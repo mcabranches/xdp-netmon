@@ -25,7 +25,7 @@ struct bpf_map_def SEC("maps") xdp_syn_track_map = {
 	.type        = BPF_MAP_TYPE_HASH,
 	.key_size    = sizeof(struct ip4_5tuple),
 	.value_size  = sizeof(__u64),
-	.max_entries = 65536
+	.max_entries = 1024
 };
 
 static __u64 reverse_byte_order_long(__u64 a) {
@@ -49,7 +49,7 @@ int syn_flood_analyzer(struct xdp_md* ctx) {
 	void* data_end = (void*)(unsigned long) ctx->data_end;
 	__u8 is_gpv;
 
-	//See if this is GPV packet
+	//Test if this is GPV packet
 	is_gpv = test_gpv(ctx);
 
 	if (is_gpv) {	
@@ -72,12 +72,14 @@ int syn_flood_analyzer(struct xdp_md* ctx) {
 					__u64* tracked = bpf_map_lookup_elem(&xdp_syn_track_map, ip45t);
 
 					if ((pd_tcp->flags & TCP_FLAG_SYN) && !(pd_tcp->flags & TCP_FLAG_ACK)) {
-						// bpf_debug("gpv: tcp/syn segment at %lu\n", ts);
+						//bpf_debug("gpv: tcp/syn segment at %lu\n", ts);
 					
 						if (!tracked) {
 							if (bpf_map_update_elem(&xdp_syn_track_map, ip45t, &ts, BPF_NOEXIST) == 0) {
 								//bpf_debug("syn_flood_detect: untracked syn segment: added entry\n");
-							} else { bpf_debug("syn_flood_detect: failed adding entry"); }
+							} else { 
+								//bpf_debug("syn_flood_detect: failed adding entry"); 
+							}
 						} else {
 							//bpf_debug("syn_flood_detect: already tracked syn segment\n");
 						}
@@ -87,8 +89,10 @@ int syn_flood_analyzer(struct xdp_md* ctx) {
 
 						if (tracked) {
 							if (bpf_map_delete_elem(&xdp_syn_track_map, ip45t) == 0) {
-								bpf_debug("syn_flood_detect: already tracked ack segment: removed entry\n");
-							} else { bpf_debug("syn_flood_detect: failed removing entry"); }
+								//bpf_debug("syn_flood_detect: already tracked ack segment: removed entry\n");
+							} else { 
+								//bpf_debug("syn_flood_detect: failed removing entry"); 
+							}
 						} else {
 							//bpf_debug("syn_flood_detect: untracked ack segment\n");
 						}
@@ -99,20 +103,20 @@ int syn_flood_analyzer(struct xdp_md* ctx) {
 	}
 	else
 	{
-		//process as a vanilla TCP packet
+		//process as a vanilla TCP packet (to-do)
 		//bpf_debug("Vanilla TCP packet\n");
 	}
 
 
 	//add a simple counter to test user space app
-	__u32 *counter;
-	__u32 key = 0;
+	//__u32 *counter;
+	//__u32 key = 0;
 
-	counter = bpf_map_lookup_elem(&xdp_syn_flood_analyzer_map, &key);
-	if (counter){
-		*counter += 1;
+	//counter = bpf_map_lookup_elem(&xdp_syn_flood_analyzer_map, &key);
+	//if (counter){
+	//	*counter += 1;
 		//bpf_debug("Counter: %i \n", *counter);
-	}
+	//}
 
 	//route the packet
 	bpf_tail_call(ctx, &rtg_ind_table_map, 0);
