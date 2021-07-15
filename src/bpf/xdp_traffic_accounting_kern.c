@@ -73,7 +73,28 @@ int traffic_accounting(struct xdp_md* ctx) {
                 else
         {
                 //Add code to process as a vanilla packet
-                bpf_debug(" Vanilla packet\n");
+                //bpf_debug(" Vanilla packet\n");
+                struct hkey_t hkey = {};
+                get_hkey_cm_app(ctx, &hkey);
+                struct stats* stats = bpf_map_lookup_elem(&counter_map, &counter_key);
+
+                if (stats) {
+                        stats->bytes += pkt_len;
+                        stats->pkts += 1;
+                }
+                __u32* ip_dst = &(hkey.daddr);
+                __u64* entry = bpf_map_lookup_elem(&traffic_account_map, ip_dst);
+
+                if (!entry) {
+                        if (bpf_map_update_elem(&traffic_account_map, ip_dst, &one, BPF_NOEXIST)) {
+                                //bpf_debug("traffic_account: added entry\n");
+                                } else {
+                                        //bpf_debug("traffic_account: failed adding entry\n");
+                                }
+                        } else {
+                                *entry += 1;
+                                 //bpf_debug("traffic_account: incremented existing entry\n");
+                }
         }
 
 

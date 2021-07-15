@@ -29,7 +29,7 @@ public:
 	{
 		uint8_t do_telemetry_bm = 1; //bitmap to set telemetry type e.g., GPV or vanilla packets
 
-		print_telemetry_source(hkey);
+		//print_telemetry_source(hkey);
 
 		if ((bpf_map_update_elem(_map_fd, &hkey, &do_telemetry_bm, BPF_ANY)) != 0)
 			throw std::runtime_error("xdp_set_gpv_telemetry: failed reading bpf map contents");
@@ -271,8 +271,7 @@ private:
 class xdp_router {
 public:
 	//the map lookup here may be hard coded
-	explicit xdp_router(int map_fd, struct bpf_object* bpf_obj) {
-
+	explicit xdp_router(int map_fd, struct bpf_object* bpf_obj, struct bpf_object* bpf_obj_off) {
 		if (map_fd < 0)
 			throw std::invalid_argument("xdp_router: invalid file descriptor");
 		else
@@ -282,6 +281,12 @@ public:
 			throw std::invalid_argument("xdp_router: invalid bpf object");
 		else
 			_bpf_obj = bpf_obj;
+		
+		if (bpf_obj_off == nullptr)
+			throw std::invalid_argument("xdp_router: invalid bpf object (off)");
+		else
+			_bpf_obj_off = bpf_obj_off;
+
 
 		_bpf_prog = bpf_object__find_program_by_name(bpf_obj, "xdp_route_pkt");
 		_xdp_route_pkt_fd = bpf_program__fd(_bpf_prog);
@@ -314,21 +319,18 @@ public:
 
 	void update_routing(const char *map_name, struct hkey_t hkey, struct fd_list_t fd_list)
 	{
+		auto map_fd  = util::find_map_fd(_bpf_obj_off, map_name);
 		if (!strcmp(map_name, "mt_all_map"))
 		{
 			__u8 key = 0;
-
-			auto map_fd  = util::find_map_fd(_bpf_obj, map_name);
-			
-			if ((bpf_map_update_elem(map_fd, &key, &fd_list, 0)) != 0)
-				throw std::runtime_error("xdp_router: failed adding program to map");
+	
+			if ((bpf_map_update_elem(map_fd, &key, &fd_list, BPF_ANY)) != 0)
+				throw std::runtime_error("xdp_router: failed updating app route");
 		}
 
 		else if (!strcmp(map_name, "mt_proto_map"))
 		{
-			__u16 key = hkey.proto;
-
-			auto map_fd  = util::find_map_fd(_bpf_obj, map_name);
+			__u8 key = hkey.proto;
 			
 			if ((bpf_map_update_elem(map_fd, &key, &fd_list, 0)) != 0)
 				throw std::runtime_error("xdp_router: failed adding program to map");
@@ -337,8 +339,6 @@ public:
 		else if (!strcmp(map_name, "mt_sport_map"))
 		{
 			__u16 key = hkey.sport;
-
-			auto map_fd  = util::find_map_fd(_bpf_obj, map_name);
 			
 			if ((bpf_map_update_elem(map_fd, &key, &fd_list, 0)) != 0)
 				throw std::runtime_error("xdp_router: failed adding program to map");
@@ -347,8 +347,6 @@ public:
 		else if (!strcmp(map_name, "mt_dport_map"))
 		{
 			__u16 key = hkey.dport;
-
-			auto map_fd  = util::find_map_fd(_bpf_obj, map_name);
 			
 			if ((bpf_map_update_elem(map_fd, &key, &fd_list, 0)) != 0)
 				throw std::runtime_error("xdp_router: failed adding program to map");
@@ -357,8 +355,6 @@ public:
 		else if (!strcmp(map_name, "mt_dstip_map"))
 		{
 			__u32 key = hkey.daddr;
-
-			auto map_fd  = util::find_map_fd(_bpf_obj, map_name);
 			
 			if ((bpf_map_update_elem(map_fd, &key, &fd_list, 0)) != 0)
 				throw std::runtime_error("xdp_router: failed adding program to map");
@@ -408,11 +404,10 @@ public:
 
 		_last_pkts_count = total.pkts;
 
-		//std::cout << "--" << std::endl;
+		std::cout << "--" << std::endl;
         //std::cout << "eoc byte count: " << total.bytes << std::endl;
         //std::cout << "eoc pkt count: " << total.pkts << std::endl;
 		std::cout << "eoc pkt/s: " << pkt_rate << std::endl;
-
     }
 
 private:
@@ -421,6 +416,7 @@ private:
 	int _xdp_route_pkt_fd;
 	unsigned _n_cpus;
 	struct bpf_object *_bpf_obj = nullptr;
+	struct bpf_object *_bpf_obj_off = nullptr;
 	struct bpf_program *_bpf_prog;
 	struct bpf_object *_bpf_obj_apps[MAX_CPO_PRGS];
 	int _last_pkts_count;
@@ -428,7 +424,6 @@ private:
 
 	void init_ind_table(struct bpf_object* bpf_obj)
 	{
-
 		int entry_idx = 0;
 		auto rtg_ind_table_map_fd = util::find_map_fd(bpf_obj, "rtg_ind_table_map");
 		if ((bpf_map_update_elem(rtg_ind_table_map_fd, &entry_idx, &_xdp_route_pkt_fd, 0)) != 0)

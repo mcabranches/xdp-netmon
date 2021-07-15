@@ -7,7 +7,7 @@
 
 
 struct bpf_map_def SEC("maps") map_hll_1 = {
-	.type = BPF_MAP_TYPE_HASH,
+	.type = BPF_MAP_TYPE_ARRAY,
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(__u32),
 	.max_entries = NUM_BUCKETS,
@@ -46,8 +46,6 @@ static __always_inline int update_HLL(struct xdp_md *ctx)
 		if (num_zeros > *cur_max_zeros)
 		{
 			bpf_map_update_elem(&map_hll_1, &bucket, &num_zeros, BPF_EXIST);
-			//bpf_debug("bucket: %u\n", bucket);
-			//bpf_debug("cur_max_zeroes: %u\n", num_zeros);
 		}
 	}
 	

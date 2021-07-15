@@ -7,9 +7,6 @@
 #include <net/if.h>
 #include <thread>
 
-//#include "xdp_comp_off_user.h"
-//#include "../shared.h"
-
 
 int main(int argc, char** argv) {
 
