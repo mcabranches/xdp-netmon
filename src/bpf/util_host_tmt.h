@@ -7,7 +7,7 @@
 
 
 struct bpf_map_def SEC("maps") map_hll_1 = {
-	.type = BPF_MAP_TYPE_HASH,
+	.type = BPF_MAP_TYPE_ARRAY,
 	.key_size = sizeof(__u32),
 	.value_size = sizeof(__u32),
 	.max_entries = NUM_BUCKETS,

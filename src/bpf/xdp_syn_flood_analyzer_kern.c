@@ -3,7 +3,7 @@
 #include <bpf/bpf_helpers.h>
 #include <linux/in.h>
 #include <linux/ip.h>
-#include <linux/udp.h>
+#include <linux/tcp.h>
 #include "../shared.h"
 #include "util_host_rtg_shared.h"
 

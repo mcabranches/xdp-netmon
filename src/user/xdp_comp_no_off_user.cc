@@ -77,8 +77,8 @@ int main(int argc, char** argv) {
 	xdp_router.update_routing("mt_sport_map", hkey_conf_rtg, fd_list);
 	hkey_conf_rtg.dport = 53;
 	xdp_router.update_routing("mt_dport_map", hkey_conf_rtg, fd_list);
-	//hkey_conf_rtg.daddr = 167837953; //10.1.1.1
-	//xdp_router.update_routing("mt_dstip_map", hkey_conf_rtg, fd_list);
+	hkey_conf_rtg.daddr = 167837953; //10.1.1.1
+	xdp_router.update_routing("mt_dstip_map", hkey_conf_rtg, fd_list);
 
 	//HyperLogLog
 	auto hll_map_fd  = util::find_map_fd(bpf_obj, "map_hll_1");
@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
 	std::uint32_t key;
 
 	while (!stop) {
-		std::cout << "--------------------" << std::endl;
+	/*	std::cout << "--------------------" << std::endl;
 		xdp_hll.print_estimate();
 
 		std::cout << "--" << std::endl;
@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
 		std::cout << "--" << std::endl;
 		std::cout << "Total (UDP)" << std::endl;
 		traffic_counter.print_stats(key);
-		
+	*/	
 		xdp_router.print_eoc_counter();
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000));

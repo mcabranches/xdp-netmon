@@ -78,16 +78,16 @@ int main(int argc, char** argv) {
 
 	//not setting a key for "match all table"
 	fd_list.fds[0] = traffic_accounting_idx;
-	xdp_router.update_routing("mt_all_map", hkey_conf_rtg, fd_list);
+	//xdp_router.update_routing("mt_all_map", hkey_conf_rtg, fd_list);
 	fd_list.fds[0] = syn_flood_analyzer_idx;
 	hkey_conf_rtg.proto = 6;
-	xdp_router.update_routing("mt_proto_map", hkey_conf_rtg, fd_list);
+	//xdp_router.update_routing("mt_proto_map", hkey_conf_rtg, fd_list);
 	fd_list.fds[0] = dns_refl_analyzer_idx;
 	hkey_conf_rtg.sport = 53;
-	xdp_router.update_routing("mt_sport_map", hkey_conf_rtg, fd_list);
+	//xdp_router.update_routing("mt_sport_map", hkey_conf_rtg, fd_list);
 	hkey_conf_rtg.dport = 53;
-	xdp_router.update_routing("mt_dport_map", hkey_conf_rtg, fd_list);
-	//hkey_conf_rtg.daddr = 167837953; //10.1.1.1
+	//xdp_router.update_routing("mt_dport_map", hkey_conf_rtg, fd_list);
+	hkey_conf_rtg.daddr = 167837953; //10.1.1.1
 	//xdp_router.update_routing("mt_dstip_map", hkey_conf_rtg, fd_list);
 
 	//HyperLogLog

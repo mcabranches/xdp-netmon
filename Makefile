@@ -13,7 +13,7 @@ CXXFLAGS ?= -Wall -g
 all: $(BUILD_USER_DIR)/xdp_comp_off_user $(BUILD_BPF_DIR)/xdp_comp_off_kern_nic.o $(BUILD_BPF_DIR)/xdp_comp_off_kern_host.o \
 			$(BUILD_BPF_DIR)/xdp_dns_refl_analyzer_kern.o $(BUILD_BPF_DIR)/xdp_syn_flood_analyzer_kern.o \
 			$(BUILD_BPF_DIR)/xdp_traffic_accounting_kern.o $(BUILD_USER_DIR)/xdp_comp_syn_flood_analyzer_user \
-			$(BUILD_USER_DIR)/xdp_comp_no_off_user $(BUILD_BPF_DIR)/xdp_comp_no_off_kern.o
+			$(BUILD_USER_DIR)/xdp_comp_no_off_user $(BUILD_BPF_DIR)/xdp_comp_no_off_kern.o $(BUILD_BPF_DIR)/xdp_gpv_lb_kern_nic.o
 			
 # directories:
 

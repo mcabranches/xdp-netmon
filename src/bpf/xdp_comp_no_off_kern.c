@@ -23,7 +23,7 @@ int xdp_entry_router(struct xdp_md* ctx) {
 	{
 		gen_meta_hll(ctx);
 		update_counter(ctx, hkey);
-		update_cms(ctx, hkey);
+		//update_cms(ctx, hkey);
 	}
 
 	process_custom_telemetry_meta(ctx);

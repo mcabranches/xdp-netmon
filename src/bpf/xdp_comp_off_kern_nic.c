@@ -19,12 +19,12 @@ int xdp_pass(struct xdp_md* ctx) {
 
 		update_counter(ctx, hkey);
 		
-		update_cms(ctx, hkey);
+		//update_cms(ctx, hkey);
 		
 		//simple LB
 		//set number of queues on the NIC: $sudo ethtool -L enp4s0np0np0 combined 8
 		hash = jhash(&hkey, sizeof(struct hkey_t), 0xdeadbeef);
-		ctx->rx_queue_index = (hash % 8);
+		ctx->rx_queue_index = (hash % 4);
 	}
 	
 	return XDP_PASS;
