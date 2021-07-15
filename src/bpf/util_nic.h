@@ -152,7 +152,6 @@ static __always_inline int get_hkey(const struct xdp_md* ctx, struct hkey_t *hke
 				}
 			}
 		}
-		hkey->proto = 6;
 	}	
 	return -1;
 }
