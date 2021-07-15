@@ -32,7 +32,7 @@ int xdp_pass(struct xdp_md* ctx) {
 		mt_port(ctx, &hkey);
 		
 		//simple LB
-		//Please, set number of queues on the NIC: e.g., $sudo ethtool -L enp4s0np0np0 combined 2
+		//Please, set number of queues on the NIC: e.g., $sudo ethtool -L enp4s0np0np0 combined 1
 		//and configure IRQ affinity
 		hash = jhash(&hkey, sizeof(struct hkey_t), 0xdeadbeef);
 		ctx->rx_queue_index = (hash % 1);
