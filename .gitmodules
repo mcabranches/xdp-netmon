@@ -1,0 +1,4 @@
+[submodule "ext/libbpf"]
+	path = ext/libbpf
+	url = https://github.com/libbpf/libbpf/
+	ignore = dirty
