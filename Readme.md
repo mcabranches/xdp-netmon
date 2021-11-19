@@ -5,7 +5,7 @@
     git submodule init
     git submodule update
 
-    apt-get install build-essential clang gcc-multilib libelf-dev llvm
+    sudo apt-get install build-essential clang gcc-multilib libelf-dev llvm
 
 ## Compilation
 
@@ -18,4 +18,4 @@
 
 Code in the main branch implement the system with SmartNIC offloads.
 
-If a Netronome SmartNIC is not available, please use the code located on the branch: "no\_offload\_case".
+If a Netronome SmartNIC is not available, please use the code located on the branch: "no\_offload\_code".
